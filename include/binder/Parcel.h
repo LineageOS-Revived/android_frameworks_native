@@ -107,6 +107,7 @@ public:
     status_t            writeUint64(uint64_t val);
     status_t            writeFloat(float val);
     status_t            writeDouble(double val);
+    status_t            writeIntPtr(intptr_t val);
     status_t            writeCString(const char* str);
     status_t            writeString8(const String8& str);
     status_t            writeString16(const String16& str);
