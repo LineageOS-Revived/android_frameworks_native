@@ -1094,6 +1094,11 @@ status_t Parcel::writeDouble(double val)
 
 #endif
 
+status_t Parcel::writeIntPtr(intptr_t val)
+{
+    return writeAligned(val);
+}
+
 status_t Parcel::writeCString(const char* str)
 {
     return write(str, strlen(str)+1);
