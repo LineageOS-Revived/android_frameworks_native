@@ -16,6 +16,7 @@
 
 #define LOG_TAG "Parcel"
 //#define LOG_NDEBUG 0
+#define COMPAT_RILD_LOLLIPOP
 
 #include <errno.h>
 #include <fcntl.h>
