@@ -196,6 +196,10 @@ ssize_t SensorManager::getSensorList(Sensor const* const** list) {
     return static_cast<ssize_t>(mSensors.size());
 }
 
+ssize_t SensorManager::getSensorList(Sensor const* const** list) const {
+    return const_cast<SensorManager*>(this)->getSensorList(list);
+}
+
 ssize_t SensorManager::getDynamicSensorList(Vector<Sensor> & dynamicSensors) {
     Mutex::Autolock _l(mLock);
     status_t err = assertStateLocked();
