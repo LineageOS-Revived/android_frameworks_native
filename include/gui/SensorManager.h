@@ -55,6 +55,7 @@ public:
     ~SensorManager();
 
     ssize_t getSensorList(Sensor const* const** list);
+    ssize_t getSensorList(Sensor const* const** list) const;
     ssize_t getDynamicSensorList(Vector<Sensor>& list);
     Sensor const* getDefaultSensor(int type);
     sp<SensorEventQueue> createEventQueue(String8 packageName = String8(""), int mode = 0);
