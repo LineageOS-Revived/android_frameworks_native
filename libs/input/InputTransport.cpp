@@ -501,7 +501,8 @@ bool InputConsumer::isTouchResamplingEnabled() {
 
 status_t InputConsumer::consume(InputEventFactoryInterface* factory,
         bool consumeBatches, nsecs_t frameTime, uint32_t* outSeq, InputEvent** outEvent,
-        int32_t* displayId) {
+        int32_t* displayId, int* motionEventType, int* touchMoveNumber, bool* flag) {
+
 #if DEBUG_TRANSPORT_ACTIONS
     ALOGD("channel '%s' consumer ~ consume: consumeBatches=%s, frameTime=%" PRId64,
             mChannel->getName().c_str(), consumeBatches ? "true" : "false", frameTime);
@@ -521,10 +522,20 @@ status_t InputConsumer::consume(InputEventFactoryInterface* factory,
         } else {
             // Receive a fresh message.
             status_t result = mChannel->receiveMessage(&mMsg);
+            if (result == 0) {
+                if ((mMsg.body.motion.action & AMOTION_EVENT_ACTION_MASK) == AMOTION_EVENT_ACTION_MOVE){
+                    mTouchMoveCounter++;
+                } else {
+                    mTouchMoveCounter = 0;
+                }
+                *flag = true;
+            }
+            *motionEventType = mMsg.body.motion.action & AMOTION_EVENT_ACTION_MASK;
+            *touchMoveNumber = mTouchMoveCounter;
             if (result) {
                 // Consume the next batched event unless batches are being held for later.
                 if (consumeBatches || result != WOULD_BLOCK) {
-                    result = consumeBatch(factory, frameTime, outSeq, outEvent, displayId);
+                    result = consumeBatch(factory, frameTime, outSeq, outEvent, displayId, touchMoveNumber);
                     if (*outEvent) {
 #if DEBUG_TRANSPORT_ACTIONS
                         ALOGD("channel '%s' consumer ~ consumed batch event, seq=%u",
@@ -620,7 +631,8 @@ status_t InputConsumer::consume(InputEventFactoryInterface* factory,
 }
 
 status_t InputConsumer::consumeBatch(InputEventFactoryInterface* factory,
-        nsecs_t frameTime, uint32_t* outSeq, InputEvent** outEvent, int32_t* displayId) {
+        nsecs_t frameTime, uint32_t* outSeq, InputEvent** outEvent, int32_t* displayId,
+        int* touchMoveNumber) {
     status_t result;
     for (size_t i = mBatches.size(); i > 0; ) {
         i--;
@@ -633,7 +645,7 @@ status_t InputConsumer::consumeBatch(InputEventFactoryInterface* factory,
         }
 
         nsecs_t sampleTime = frameTime;
-        if (mResampleTouch) {
+        if (mResampleTouch && (*touchMoveNumber != 1)) {
             sampleTime -= RESAMPLE_LATENCY;
         }
         ssize_t split = findSampleNoLaterThan(batch, sampleTime);
