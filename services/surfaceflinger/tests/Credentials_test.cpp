@@ -27,6 +27,7 @@
 #include <private/android_filesystem_config.h>
 #include <private/gui/ComposerServiceAIDL.h>
 #include <ui/DisplayMode.h>
+#include <ui/DisplayState.h>
 #include <ui/DynamicDisplayInfo.h>
 #include <utils/String8.h>
 #include <functional>
@@ -389,8 +390,13 @@ TEST_F(CredentialsTest, TransactionPermissionTest) {
                 .apply();
     }
 
-    // Called from non privileged process
-    Transaction().setTrustedOverlay(surfaceControl, true);
+    // Attempt to set a trusted overlay from a non-privileged process. This should fail silently.
+    {
+        UIDFaker f{AID_BIN};
+        Transaction().setTrustedOverlay(surfaceControl, true).apply(/*synchronous=*/true);
+    }
+
+    // Verify that the layer was not made a trusted overlay.
     {
         UIDFaker f(AID_SYSTEM);
         auto windowIsPresentAndNotTrusted = [&](const std::vector<WindowInfo>& windowInfos) {
@@ -401,12 +407,14 @@ TEST_F(CredentialsTest, TransactionPermissionTest) {
             }
             return !foundWindowInfo->inputConfig.test(WindowInfo::InputConfig::TRUSTED_OVERLAY);
         };
-        windowInfosListenerUtils.waitForWindowInfosPredicate(windowIsPresentAndNotTrusted);
+        ASSERT_TRUE(
+                windowInfosListenerUtils.waitForWindowInfosPredicate(windowIsPresentAndNotTrusted));
     }
 
+    // Verify that privileged processes are able to set trusted overlays.
     {
         UIDFaker f(AID_SYSTEM);
-        Transaction().setTrustedOverlay(surfaceControl, true);
+        Transaction().setTrustedOverlay(surfaceControl, true).apply(/*synchronous=*/true);
         auto windowIsPresentAndTrusted = [&](const std::vector<WindowInfo>& windowInfos) {
             auto foundWindowInfo =
                     WindowInfosListenerUtils::findMatchingWindowInfo(windowInfo, windowInfos);
@@ -415,8 +423,59 @@ TEST_F(CredentialsTest, TransactionPermissionTest) {
             }
             return foundWindowInfo->inputConfig.test(WindowInfo::InputConfig::TRUSTED_OVERLAY);
         };
-        windowInfosListenerUtils.waitForWindowInfosPredicate(windowIsPresentAndTrusted);
+        ASSERT_TRUE(
+                windowInfosListenerUtils.waitForWindowInfosPredicate(windowIsPresentAndTrusted));
     }
+}
+
+TEST_F(CredentialsTest, DisplayTransactionPermissionTest) {
+    const auto display = getFirstDisplayToken();
+
+    ui::DisplayState displayState;
+    ASSERT_EQ(NO_ERROR, SurfaceComposerClient::getDisplayState(display, &displayState));
+    const ui::Rotation initialOrientation = displayState.orientation;
+
+    // Set display orientation from an untrusted process. This should fail silently.
+    {
+        UIDFaker f{AID_BIN};
+        Transaction transaction;
+        Rect layerStackRect;
+        Rect displayRect;
+        transaction.setDisplayProjection(display, initialOrientation + ui::ROTATION_90,
+                                         layerStackRect, displayRect);
+        transaction.apply(/*synchronous=*/true);
+    }
+
+    // Verify that the display orientation did not change.
+    ASSERT_EQ(NO_ERROR, SurfaceComposerClient::getDisplayState(display, &displayState));
+    ASSERT_EQ(initialOrientation, displayState.orientation);
+
+    // Set display orientation from a trusted process.
+    {
+        UIDFaker f{AID_SYSTEM};
+        Transaction transaction;
+        Rect layerStackRect;
+        Rect displayRect;
+        transaction.setDisplayProjection(display, initialOrientation + ui::ROTATION_90,
+                                         layerStackRect, displayRect);
+        transaction.apply(/*synchronous=*/true);
+    }
+
+    // Verify that the display orientation did change.
+    ASSERT_EQ(NO_ERROR, SurfaceComposerClient::getDisplayState(display, &displayState));
+    ASSERT_EQ(initialOrientation + ui::ROTATION_90, displayState.orientation);
+
+    // Reset orientation
+    {
+        UIDFaker f{AID_SYSTEM};
+        Transaction transaction;
+        Rect layerStackRect;
+        Rect displayRect;
+        transaction.setDisplayProjection(display, initialOrientation, layerStackRect, displayRect);
+        transaction.apply(/*synchronous=*/true);
+    }
+    ASSERT_EQ(NO_ERROR, SurfaceComposerClient::getDisplayState(display, &displayState));
+    ASSERT_EQ(initialOrientation, displayState.orientation);
 }
 
 } // namespace android
